@@ -15,6 +15,7 @@ class Trade(models.Model):
     close_time = models.DateTimeField(null=True, blank=True)
     profit = models.DecimalField(max_digits=12, decimal_places=2)
     lot_size = models.DecimalField(max_digits=10, decimal_places=2)
+    ticker = models.CharField(max_length=10, null=False, blank=False)
 
     class Meta:
         db_table = 'trades'

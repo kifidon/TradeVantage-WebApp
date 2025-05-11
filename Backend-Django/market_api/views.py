@@ -34,9 +34,10 @@ class ExpertAdvisorViewSet(ModelViewSet):
     permission_classes = [IsProgrammerOrReadOnly]
     
     def get_queryset(self):
-        return ExpertAdvisor.objects.annotate(
+        experts = ExpertAdvisor.objects.annotate(
             download_count=Count('downloads')  # reverse FK from ExpertUser
         )
+        return experts 
 
 class ExpertUserViewSet(ModelViewSet):
     serializer_class = ExpertUserSerializer

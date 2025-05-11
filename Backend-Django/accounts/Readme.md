@@ -31,74 +31,67 @@
 | POST   | `/api/login/`           | Obtain JWT access & refresh tokens  |
 | POST   | `/api/login/refresh/`   | Refresh an access token             |
 
-## Example JSON
 
-### Registration Request
-```json
-{
-  "email": "jane.doe@example.com",
-  "full_name": "Jane Doe",
-  "password": "securePass123",
-  "role": "programmer"
-}
-```
+## Accounts API Documentation
 
-### Registration Response
-```json
-{
-  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "email": "jane.doe@example.com",
-  "full_name": "Jane Doe",
-  "role": "programmer",
-  "date_joined": "2025-05-01T10:00:00Z"
-}
-```
+### User Registration
 
-### Token Request
-```json
-{
-  "email": "jane.doe@example.com",
-  "password": "securePass123"
-}
-```
+- **Request**  
+  ```http
+  POST /api/register/
+  Content-Type: application/json
 
-### Token Response
-```json
-{
-  "access": "eyJ0eXAiOiJKV1QiLCJhbGci...",
-  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGci..."
-}
-```
-
-## URL Patterns (JSON Format)
-```json
-{
-  "RegisterView": {
-    "create": "/api/register/"
-  },
-  "TokenObtainPairView": {
-    "create": "/api/login/"
-  },
-  "TokenRefreshView": {
-    "create": "/api/login/refresh/"
+  {
+    "email": "testuser@example.com",
+    "full_name": "Test User",
+    "password": "securepassword123",
+    "role": "programmer"
   }
-}
-```
-
-## Admin
-
-- Registered model: `User`  
-- Configured with list display, filters, and search on email & role  
-
-## Testing
-
-- Run tests for Accounts API:
-  ```bash
-  python manage.py test accounts --keepdb
   ```
 
-## Contributing
+- **Responses**  
+  - **201 Created**  
+    ```json
+    {
+      "email": "testuser@example.com",
+      "full_name": "Test User",
+      "role": "programmer"
+    }
+    ```
+  - **400 Bad Request**  
+    ```json
+    {
+      "email": ["This field is required."],
+      "password": ["Ensure this field has at least 8 characters."],
+      "role": ["\"invalid_role\" is not a valid choice."]
+    }
+    ```
 
-1. Fork the repo  
-2. Open a branch `feature/accounts-readme`  
-3. Submit a pull request  
+### User Login
+
+- **Request**  
+  ```http
+  POST /api/login/
+  Content-Type: application/json
+
+  {
+    "email": "existing@example.com",
+    "password": "securepass"
+  }
+  ```
+
+- **Responses**  
+  - **200 OK**  
+    ```json
+    {
+      "access": "<jwt_access_token>",
+      "refresh": "<jwt_refresh_token>"
+    }
+    ```
+  - **401 Unauthorized**  
+    ```json
+    {
+      "detail": "No active account found with the given credentials"
+    }
+    ```
+

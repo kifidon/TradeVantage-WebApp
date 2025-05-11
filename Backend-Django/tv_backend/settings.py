@@ -14,6 +14,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import dj_database_url
 import os
+import logging
+import sys
 
 load_dotenv()
 
@@ -41,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'django_filters',
+    "corsheaders",
     'accounts',
     'market_api',
     'dashboard_api',
@@ -54,6 +57,8 @@ REST_FRAMEWORK = {
 }
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",    
+    "django.middleware.common.CommonMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -64,6 +69,24 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'tv_backend.urls'
+
+# during dev, you can allow all origins:
+CORS_ALLOW_ALL_ORIGINS = True
+
+# # or be explicit:
+# CORS_ALLOWED_ORIGINS = [
+#   "http://localhost:3000",
+#   "https://your-v0-subdomain.v0.dev",
+# ]
+
+CORS_ALLOW_METHODS = [
+  "DELETE",
+  "GET",
+  "OPTIONS",
+  "PATCH",
+  "POST",
+  "PUT",
+]
 
 TEMPLATES = [
     {
@@ -108,6 +131,30 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+
+# Create a logger
+logger = logging.getLogger("my_app_logger")
+logger.setLevel(logging.DEBUG)  # Or INFO for less verbosity
+
+# Formatter for log messages
+formatter = logging.Formatter(
+    "[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Console (stdout) handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(formatter)
+
+# File handler (optional, can skip if only stdout is needed)
+file_handler = logging.FileHandler("app.log")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+# Add handlers to the logger (if not already added)
+if not logger.hasHandlers():
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

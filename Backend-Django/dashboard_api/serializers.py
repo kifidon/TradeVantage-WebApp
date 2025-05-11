@@ -12,7 +12,8 @@ class TradeSerializer(serializers.ModelSerializer):
             'open_time',
             'close_time',
             'profit',
-            'lot_size'
+            'lot_size',
+            'ticker'
         ]
     
     def get_fields(self):

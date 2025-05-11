@@ -1,336 +1,119 @@
-MT4 Expert Advisor Hub
+# TradeVantage Backend API
+
+This Django project (`tv_backend`) provides the backend for the TradeVantage Web App, including user authentication, trade management, and subscription validation. It consists of multiple apps, each exposing RESTful endpoints secured with JWT.
+
+## Table of Contents
+
+1. [Project Structure](#project-structure)  
+2. [Authentication & Accounts](#authentication--accounts)  
+3. [Dashboard API](#dashboard-api)  
+4. [Market API](#market-api)  
+5. [Authentication Requirements](#authentication-requirements)  
+
+---
+
+## Project Structure
+
+```text
+Backend-Django/      # Root directory with requirnemnts.txt, manage.py, etc.
+├── tv-backend/      # Django project directory with settings and app.
+├── accounts/        # Custom User model and JWT endpoints
+├── dashboard_api/   # Trade management, filtering, subscriptions
+├── market_api/      # (Market data & ExpertAdvisor models)
+└── manage.py
+```
+
+---
+
+## Authentication & Accounts
+
+Handles user registration and login using a custom User model and JWT.
+
+- **Custom User Model**  
+  - UUID primary key, email as login, full name, role, timestamps  
+- **Endpoints**  
+  - `POST /api/register/` — Create a new user  
+  - `POST /api/login/` — Obtain access & refresh tokens  
+  - `POST /api/login/refresh/` — Refresh an access token  
+
+**Sample Registration Request**  
+```json
+POST /api/register/
+{
+  "email": "user@example.com",
+  "full_name": "User Name",
+  "password": "SecurePass123",
+  "role": "programmer"
+}
+```
+
+**Sample Login Response**  
+```json
+POST /api/login/
+{
+  "access": "<jwt_access_token>",
+  "refresh": "<jwt_refresh_token>"
+}
+```
+
+---
+
+## Dashboard API
+
+Manages user trades and validates subscriptions to Expert Advisors.
+
+- **Key Models**  
+  - **Trade**: id, user, expert, open_time, close_time, profit, lot_size  
+  - **ExpertUser**: links user subscriptions to ExpertAdvisor  
+
+- **Features**  
+  - Create, retrieve, update, and list trades (deletion disabled)  
+  - Filter by expert, time ranges, profit, and lot size  
+  - Check subscription status for an Expert Advisor  
+
+- **Endpoints**  
+  - `GET /api/trade/` — List trades  
+  - `POST /api/trade/` — Create a trade  
+  - `GET /api/trade/{id}/` — Retrieve a trade  
+  - `PUT /api/trade/{id}/` — Full update  
+  - `PATCH /api/trade/{id}/` — Partial update  
+  - `DELETE /api/trade/{id}/` — Disabled (405)  
+  - `GET /api/trade-auth/{magic_number}/` — Check subscription  
+
+**Sample Trade Object**  
+```json
+{
+  "id": "uuid",
+  "user": "user@example.com",
+  "expert": "EA1234MAGIC",
+  "open_time": "2025-05-03T14:00:00Z",
+  "close_time": null,
+  "profit": "150.00",
+  "lot_size": "2.00"
+}
+```
+
+---
+
+## Market API
+
+_Provides data models and endpoints for ExpertAdvisor definitions and market-related operations._
+
+- **Key Models**  
+  - **ExpertAdvisor**: name, description, version, author, magic_number  
+  - **(Additional market endpoints go here.)**  
 
-Tagline: A cloud‑native web platform for distributing MT4 Expert Advisors (EAs) and visualising monthly trading performance – built entirely on free‑tier services to showcase modern Cloud / DevOps skills.
+- **Endpoints**  
+  - `GET /api/experts/` — List available Expert Advisors  
+  - `GET /api/experts/{magic_number}/` — Retrieve expert details  
 
-📌 Feature Set
+---
 
-Area
+## Authentication Requirements
 
-Capability
+- All endpoints under `/api/` (except registration and login) require a valid JWT in the `Authorization: Bearer <token>` header.
+- Tokens expire; use `/api/login/refresh/` to obtain fresh access tokens.
 
-Landing
+---
 
-Marketing About page with CTA Start Now → Register/Login
-
-Auth
-
-Supabase Auth (email / OAuth) – JWT tokens consumed by React + Axios
-
-Dashboard
-
-• Monthly KPIs: total trades, wins, losses, net profit
-
-           • Breakdown per‑EA  
-           • Responsive graphs (Recharts) & summary cards |
-
-| Market | Browse all EAs, filter/search, link cards → /experts/{magicNumber} |
-| EA Detail | Hero image, description, download instructions, direct .ex4 link |
-| API | Django REST Framework CRUD endpoints protected by JWT |
-| DevOps | Dockerised services, GitHub Actions CI/CD, K8s (K3s) on Civo Free |
-
-🏗️ Architecture Overview
-
-┌──────────────────────────────┐       ┌───────────────────────────┐
-│        React Front‑End       │ ----> │  Django REST API (JWT)    │
-│  • Vite + Axios              │       │  • DRF                    │
-│  • Recharts / Headless UI    │       │  • Celery (optional)      │
-└──────────────────────────────┘       │  • Supabase Postgres      │
-            ▲ ▲                         └────────┬──────────────────┘
-            │ └────────────GraphQL (future)──────┘
-            │
-            └── Auth / Storage  ←––––  Supabase  (Free Tier)
-
-All components are containerised and deployed via a lightweight K3s cluster (Civo or Okteto free tier).
-
-🛣️ Roadmap
-
-Phase
-
-Goal
-
-Milestones
-
-0
-
-Project Bootstrap
-
-Repo init · Issue templates · Pre‑commit hooks
-
-1
-
-Data Model & API
-
-Supabase schema · Django models · CRUD endpoints
-
-2
-
-Auth & Landing
-
-Supabase auth · About page · Register/Login flow
-
-3
-
-Dashboard MVP
-
-Axios client · Monthly summary query · Recharts graphs
-
-4
-
-Market & Detail
-
-EA catalogue · /experts/{magicNumber} page
-
-5
-
-CI/CD Pipeline
-
-GitHub Actions build → Docker Hub push
-
-6
-
-K8s Deployment
-
-Helm chart · Ingress · TLS via Let’s Encrypt
-
-7
-
-Observability
-
-Grafana Cloud (free) · Loki logs · Prometheus metrics
-
-8
-
-Polish & Docs
-
-README badges · Screenshots · Video demo
-
-🗄️ Database Design (Supabase / Postgres)
-
-erDiagram
-    users ||--o{ expert_users : "owns"
-    users {
-      uuid id PK
-      text email
-      text full_name
-    }
-
-    expert_advisors ||--o{ trades : "has"
-    expert_advisors {
-      int  id PK  "magicNumber"
-      text title
-      text description
-      text image_url
-      text file_url
-      timestamptz created_at
-    }
-
-    expert_users {
-      int id PK
-      uuid user_id FK
-      int expert_id FK
-      timestamptz subscribed_at
-    }
-
-    trades {
-      bigint id PK
-      int expert_id FK
-      uuid user_id FK
-      timestamptz open_time
-      timestamptz close_time
-      numeric profit
-      numeric lot_size
-    }
-
-Monthly KPIs are served via a DB materialised view v_monthly_stats for fast reads.
-
-🛍️ Market Page & Catalog Workflow
-
-Element
-
-Detail
-
-Route
-
-/market (public) – grid/list of all EAs
-
-UI
-
-Card per EA → image, title, subtitle, “View” CTA
-
-Filters
-
-Text search (title, magicNumber), profit range slider, category tags (future)
-
-Sorting
-
-Default: newest; options: most‑downloaded, highest win‑rate
-
-Call‑to‑Action
-
-Clicking a card → /experts/{magicNumber}
-
-Data Source
-
-GET /api/experts/ – paginated JSON from Django REST Framework
-
-Caching
-
-React Query (stale‑while‑revalidate) or SWR for instant UX
-
-Analytics
-
-Track downloads/events via Supabase analytics table (optional)
-
-Note: This page is static‑rendered in React and hydrated via Axios. For SEO you may add prerendering with Vite‑SSR, but not mandatory for MVP.
-
-📂 Repository Layout
-
-cloud-ea-hub/
-│  README.md
-│  docker-compose.yml          # Local dev
-│  kube/                       # Helm chart & manifests
-├─ frontend/                   # React (Vite)
-│   ├─ src/api/axios.ts
-│   └─ …
-└─ backend/
-    ├─ Dockerfile
-    ├─ requirements.txt
-    ├─ config/settings.py
-    └─ app/
-        ├─ experts/
-        ├─ trades/
-        └─ …
-
-🐳 Containerisation Steps
-
-Frontend
-
-FROM node:20-alpine
-WORKDIR /app
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ .
-RUN npm run build
-CMD ["npx", "serve", "-s", "dist", "-l", "80"]
-
-Backend
-
-FROM python:3.12-slim
-WORKDIR /srv
-COPY backend/requirements.txt ./
-RUN pip install -r requirements.txt
-COPY backend/ .
-CMD ["gunicorn", "config.wsgi:application", "-b", "0.0.0.0:8000"]
-
-docker-compose.yml (dev) – services: frontend, backend, traefik (reverse proxy).
-
-☸️ Kubernetes (K3s) High‑Level Workflow
-
-Step
-
-Tool
-
-Action
-
-1
-
-k3sup
-
-Bootstrap K3s cluster on Civo (free credits)
-
-2
-
-Helm
-
-helm install ea-hub ./kube/chart
-
-3
-
-Ingress‑NGINX
-
-TLS via cert‑manager + Let’s Encrypt
-
-4
-
-Secrets
-
-Supabase keys stored in K8s Secret objects
-
-5
-
-GitHub Actions
-
-On push → Build images → Push to Docker Hub → kubectl rollout restart
-
-Total free usage fits within Civo’s $250 trial or Okteto’s always‑free tier.
-
-🔄 GitHub Actions CI/CD (simplified)
-
-name: CI
-on: [push]
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Build & push images
-        run: |
-          docker build -t $REGISTRY/frontend:$SHA frontend
-          docker build -t $REGISTRY/backend:$SHA backend
-          echo $PASS | docker login -u $USER --password-stdin $REGISTRY
-          docker push $REGISTRY/frontend:$SHA
-          docker push $REGISTRY/backend:$SHA
-      - name: Deploy to K8s
-        env:
-          KUBECONFIG: ${{ secrets.KUBECONFIG }}
-        run: |
-          kubectl set image deploy/frontend frontend=$REGISTRY/frontend:$SHA
-          kubectl set image deploy/backend backend=$REGISTRY/backend:$SHA
-
-💰 Free‑Tier Cost Table
-
-Service
-
-Free Allocation
-
-Notes
-
-Supabase
-
-500 MB DB · 2 GB storage
-
-Auth, Postgres, Storage
-
-Civo K3s
-
-$250 credits (≈3 mo)
-
-Or use Okteto always‑free
-
-GitHub Actions
-
-2,000 CI minutes/mo
-
-Public repos unlimited
-
-Docker Hub
-
-1 private / unlimited public repos
-
-
-
-Grafana Cloud
-
-10k series logs & metrics
-
-Observability
-
-🗒️ TODO Checklist (Quick‑Start)
-
-
-
-📜 License
-
-MIT License © 2025 Your Name
-
+_For full request/response examples and detailed parameter lists, refer to each app’s README in the repository: `accounts/Readme.md`, `dashboard_api/Readme.md`, and `market_api/Readme.md`._  
