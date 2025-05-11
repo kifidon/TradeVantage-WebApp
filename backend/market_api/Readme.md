@@ -90,30 +90,24 @@
 
 ### Expert Advisors List
 ```json
-[
-  {
-    "magic_number": 1,
-    "name": "Trend Sniper EA",
-    "description": "A trend-following MT4 Expert Advisor",
-    "version": "1.0",
-    "author": "Stro Ifidon",
-    "created_at": "2025-04-01T12:00:00Z",
-    "updated_at": "2025-04-01T12:00:00Z",
-    "image_url": "https://example.com/images/trend-sniper.png",
-    "file_url": "https://example.com/files/trend-sniper.ex4"
-  },
-  {
-    "magic_number": 2,
-    "name": "Scalper Pro",
-    "description": "An aggressive scalping EA",
-    "version": "2.5",
-    "author": "Jane Doe",
-    "created_at": "2025-03-15T08:30:00Z",
-    "updated_at": "2025-03-15T08:30:00Z",
-    "image_url": "https://example.com/images/scalper-pro.png",
-    "file_url": "https://example.com/files/scalper-pro.ex4"
-  }
-]
+{
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "magic_number": 1,
+            "name": "Test EA",
+            "description": "This is a test EA",
+            "version": "1",
+            "author": "Timmy Ifidon",
+            "created_at": "2025-05-05T03:26:09.442261Z",
+            "updated_at": "2025-05-05T03:26:09.442276Z",
+            "image_url": "https://images.unsplash.com/photo-1502685104226-ee32379fefbe",
+            "file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+        }
+    ]
+}
 ```
 
 ### Expert Advisor Detail

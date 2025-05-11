@@ -14,6 +14,11 @@ class ExpertAdvisor(models.Model):
     author = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    supported_pairs = models.JSONField(default=list, blank=True)
+    timeframes = models.JSONField(default=list, blank=True)
+    minimum_deposit = models.DecimalField(max_digits=10, decimal_places=2, null=False, blank=False, default=0)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=100)
+    instructions = models.URLField(max_length=255, blank=True, null=True)
     image_url = models.URLField(max_length=255, blank=True, null=True)
     file_url = models.URLField(max_length=255, blank=True, null=True)
 
