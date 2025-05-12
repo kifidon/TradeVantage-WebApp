@@ -21,6 +21,7 @@ class ExpertAdvisor(models.Model):
     instructions = models.URLField(max_length=255, blank=True, null=True)
     image_url = models.URLField(max_length=255, blank=True, null=True)
     file_url = models.URLField(max_length=255, blank=True, null=True)
+    parameters = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = 'Expert Advisor'

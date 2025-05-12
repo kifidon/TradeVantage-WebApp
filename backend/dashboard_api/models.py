@@ -16,7 +16,9 @@ class Trade(models.Model):
     profit = models.DecimalField(max_digits=12, decimal_places=2)
     lot_size = models.DecimalField(max_digits=10, decimal_places=2)
     ticker = models.CharField(max_length=10, null=False, blank=False)
-
+    direction = models.CharField(max_length=4, choices=[('BUY', 'Buy'), ('SELL', 'Sell')])
+    
+    
     class Meta:
         db_table = 'trades'
         verbose_name = 'Trade'

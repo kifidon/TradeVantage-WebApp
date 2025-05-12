@@ -16,6 +16,7 @@ import dj_database_url
 import os
 import logging
 import sys
+from datetime import timedelta
 
 load_dotenv()
 
@@ -55,7 +56,13 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend', 'rest_framework.filters.OrderingFilter'],
 }
+SIMPLE_JWT = {
+    # access tokens now expire 10 minutes after issuance
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),
 
+    # leave refresh tokens at their default (or adjust as you like)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",    
     "django.middleware.common.CommonMiddleware",

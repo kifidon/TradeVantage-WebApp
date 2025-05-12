@@ -17,7 +17,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/login/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/user/', LoginUserView.as_view(), name='user_profile'),
     path('api/trade-auth/<int:magic_number>/', ExpertUserTradeCheck.as_view(), name='trade_auth'),
     path('api/', include(router.urls)),
