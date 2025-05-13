@@ -1,13 +1,15 @@
 from django.db import models
-from django.conf import settings
+from tv_backend import settings
 from django.utils import timezone
 from datetime import timedelta
+import uuid, os
 
 class ExpertAdvisor(models.Model):
     """
     Model representing Expert Advisors (EAs) for trading.
     """
-    magic_number = models.AutoField(primary_key=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    magic_number = models.IntegerField(null=False, blank=False)
     name = models.CharField(max_length=255)
     description = models.TextField()
     version = models.CharField(max_length=50)
@@ -20,9 +22,15 @@ class ExpertAdvisor(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, default=100)
     instructions = models.URLField(max_length=255, blank=True, null=True)
     image_url = models.URLField(max_length=255, blank=True, null=True)
-    file_url = models.URLField(max_length=255, blank=True, null=True)
+    file = models.CharField(max_length=255, blank=True, null=True)
     parameters = models.JSONField(default=dict, blank=True)
-
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='expert_advisor_creator', 
+        default=os.getenv("SUPERURUSER")
+    )
+    
     class Meta:
         verbose_name = 'Expert Advisor'
         verbose_name_plural = 'Expert Advisors'

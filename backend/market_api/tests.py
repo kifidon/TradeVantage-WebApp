@@ -1,32 +1,37 @@
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
-from .models import ExpertAdvisor
-from .models import ExpertUser
+from .models import ExpertAdvisor, ExpertUser
+from accounts.models import User
 from django.contrib.auth import get_user_model
 from datetime import timedelta
 from django.utils import timezone
 import json
-
+import requests
+import os
 
 class ExpertAdvisorTests(APITestCase):
-    def setUp(self):
-        # Register and log in a test user to obtain JWT token
-        user_data = {
-            "email": "testuser@example.com",
+    @classmethod
+    def setUpTestData(cls):
+        # Register and log in a test user only once for all test cases
+        cls.user_data = {
+            "email": "testuser@gmail.com",
             "full_name": "Test User",
             "password": "securepassword123",
-            "role": "programmer"
+            "role": "programmer",
+            "username": "TestUser",
+            "mock": True  # Mocking the Supabase signup
         }
-        self.client.post("/api/register/", user_data, format='json')
-        login_resp = self.client.post(
+        APIClient().post("/api/register/", cls.user_data, format='json')
+        login_resp = APIClient().post(
             "/api/login/",
-            {"email": user_data["email"], "password": user_data["password"]},
+            {"username": cls.user_data["username"], "password": cls.user_data["password"]},
             format='json'
         )
-        self.token = login_resp.data["access"]
-        # Include token in Authorization header for subsequent requests
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
-        # Create 20 mock ExpertAdvisors with varying values
+        cls.token = login_resp.data["access"]
+        cls.auth_header = f"Bearer {cls.token}"
+
+        # Create 20 mock ExpertAdvisors
+        test_user = User.objects.get(username="TestUser")
         for i in range(20):
             ExpertAdvisor.objects.create(
                 name=f"EA {i}",
@@ -36,8 +41,18 @@ class ExpertAdvisorTests(APITestCase):
                 created_at=timezone.now() - timedelta(days=i),
                 updated_at=timezone.now() - timedelta(days=i),
                 image_url=f"https://example.com/image{i}.png",
-                file_url=f"https://example.com/file{i}.ex4", 
+                file_url=f"https://example.com/file{i}.ex4",
+                magic_number=i * i,
+                supported_pairs=["EURUSD", "GBPUSD"],
+                timeframes=["M1", "M5"],
+                minimum_deposit=100.0,
+                price=50.0,
+                parameters={"param1": "value1", "param2": "value2"},
+                created_by=test_user,
             )
+
+    def setUp(self):
+        self.client.credentials(HTTP_AUTHORIZATION=self.auth_header)
 
     def test_create_valid_expert_advisor(self):
         """Test creating an Expert Advisor with valid data should succeed (201 Created)."""
@@ -47,35 +62,65 @@ class ExpertAdvisorTests(APITestCase):
             "version": "1.0",
             "author": "Test Author",
             "image_url": "https://example.com/image.png",
-            "file_url": "https://example.com/ea.ex4"
+            "file_url": "https://example.com/ea.ex4",
+            "magic_number": 123456,
+            "supported_pairs": ["EURUSD", "GBPUSD"],
+            "timeframes": ["M5", "H1"],
+            "minimum_deposit": 100.0,
+            "price": 99.99,
+            "instructions": "https://example.com/ea.pdf",
+            "parameters": {
+                "lot_size": "0.1",
+                "risk": "2"
+            }
         }
-        response = self.client.post("/api/experts/", data)
+        response = self.client.post("/api/experts/", data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_create_invalid_image_url(self):
         """Test creating an Expert Advisor with an invalid image_url should fail (400 Bad Request)."""
         data = {
             "name": "Invalid Image",
-            "description": "Test EA",
+            "description": "Not a valid EA",
             "version": "1.0",
             "author": "Test Author",
-            "image_url": "not-a-url",
-            "file_url": "https://example.com/ea.ex4"
+            "image_url": "not-an-image-url",
+            "file_url": "https://example.com/ea.ex4",
+            "magic_number": 123456,
+            "supported_pairs": ["EURUSD", "GBPUSD"],
+            "timeframes": ["M5", "H1"],
+            "minimum_deposit": 100.0,
+            "price": 99.99,
+            "instructions": "https://example.com/ea.pdf",
+            "parameters": {
+                "lot_size": "0.1",
+                "risk": "2"
+            }
         }
-        response = self.client.post("/api/experts/", data)
+        response = self.client.post("/api/experts/", data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_invalid_file_url(self):
         """Test creating an Expert Advisor with an invalid file_url should fail (400 Bad Request)."""
         data = {
             "name": "Invalid File",
-            "description": "Test EA",
+            "description": "Not a valid EA",
             "version": "1.0",
             "author": "Test Author",
-            "image_url": "https://example.com/image.png",
-            "file_url": "not-a-url"
+            "image_url": "not-an-image-url",
+            "file_url": "not-a-url",
+            "magic_number": 123456,
+            "supported_pairs": ["EURUSD", "GBPUSD"],
+            "timeframes": ["M5", "H1"],
+            "minimum_deposit": 100.0,
+            "price": 99.99,
+            "instructions": "https://example.com/ea.pdf",
+            "parameters": {
+                "lot_size": "0.1",
+                "risk": "2"
+            }
         }
-        response = self.client.post("/api/experts/", data)
+        response = self.client.post("/api/experts/", data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_get_default_page(self):
@@ -116,7 +161,7 @@ class ExpertAdvisorTests(APITestCase):
     def test_get_single_ea_by_id(self):
         """Test retrieving a single Expert Advisor by its magic_number returns correct data."""
         ea = ExpertAdvisor.objects.first()
-        response = self.client.get(f"/api/experts/{ea.magic_number}/")
+        response = self.client.get(f"/api/experts/{ea.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], ea.name)
 
@@ -161,9 +206,10 @@ class ExpertAdvisorTests(APITestCase):
         # Create users and link them to EAs
         for i in range(3):
             user = user_model.objects.create_user(
-                email=f"user{i}@example.com",
+                username=f"user{i}@example.com",
                 full_name=f"User {i}",
-                password="testpass"
+                password="testpass",
+                email=f"user{i}",
             )
             if i < 3:
                 ExpertUser.objects.create(user=user, expert=ea_with_3)
@@ -184,14 +230,16 @@ class ExpertAdvisorTests(APITestCase):
         # Register and log in a regular (non-programmer) user
         regular_data = {
             "email": "user@example.com",
+            "username": "RegularUser",
             "full_name": "Regular User",
             "password": "userpass123",
-            "role": "user"
+            "role": "user",
+            "mock": True  # Mocking the Supabase signup
         }
         self.client.post("/api/register/", regular_data, format='json')
         login_resp = self.client.post(
             "/api/login/",
-            {"email": regular_data["email"], "password": regular_data["password"]},
+            {"username": regular_data["username"], "password": regular_data["password"]},
             format='json'
         )
         regular_token = login_resp.data["access"]
@@ -208,4 +256,3 @@ class ExpertAdvisorTests(APITestCase):
         }
         response = self.client.post("/api/experts/", ea_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-

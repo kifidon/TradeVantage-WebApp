@@ -1,5 +1,5 @@
 # accounts/models.py
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 import uuid
 
@@ -14,7 +14,7 @@ class CustomUserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, full_name, password=None, **extra_fields):
+    def create_superuser(self, email, full_name=None, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
 
@@ -23,34 +23,34 @@ class CustomUserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
+        if not full_name:
+            full_name = 'Admin'
+
         return self.create_user(email, full_name, password, **extra_fields)
 
-class User(AbstractBaseUser, PermissionsMixin):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
-    full_name = models.CharField(max_length=255)
+class User(AbstractUser):
     USER = 'user'
     PROGRAMMER = 'programmer'
     ROLE_CHOICES = [
         (USER, 'User'),
         (PROGRAMMER, 'Programmer'),
     ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    full_name = models.CharField(max_length=255)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=USER)
-    is_staff = models.BooleanField(default=False)
-    is_superuser = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
-    date_joined = models.DateTimeField(auto_now_add=True)
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['full_name']
 
     objects = CustomUserManager()
 
-    def __str__(self):
-        return self.full_name + ": " + self.email
-    
     class Meta:
-        verbose_name = 'User'
-        verbose_name_plural = 'Users'
+        db_table = 'auth_user'
         ordering = ['-date_joined']
-        managed = True
-        db_table = 'users'
+
+class SupabaseUser(models.Model):
+    id = models.UUIDField(primary_key=True)
+    email = models.EmailField()
+    role = models.CharField(max_length=50, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'auth.users'

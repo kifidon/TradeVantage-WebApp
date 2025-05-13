@@ -33,6 +33,7 @@ ALLOWED_HOSTS = []
 
 AUTH_USER_MODEL = 'accounts.User'
 
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -52,7 +53,8 @@ INSTALLED_APPS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'accounts.authentication.SupabaseJWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend', 'rest_framework.filters.OrderingFilter'],
 }
@@ -61,7 +63,7 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),
 
     # leave refresh tokens at their default (or adjust as you like)
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(minutes=60),
 }
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",    
@@ -113,12 +115,13 @@ TEMPLATES = [
 WSGI_APPLICATION = 'tv_backend.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': dj_database_url.config(default=os.getenv('DATABASE_POOL_URL')),
 }
+
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

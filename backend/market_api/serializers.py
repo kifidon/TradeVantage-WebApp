@@ -2,9 +2,12 @@ from rest_framework import serializers
 from .models import ExpertAdvisor, ExpertUser
 
 class ExpertAdvisorSerializer(serializers.ModelSerializer):
+    created_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
     class Meta:
         model = ExpertAdvisor
         fields = (
+            'id',
+            'created_by',
             'magic_number',
             'name',
             'description',
