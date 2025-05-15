@@ -1,4 +1,5 @@
 from rest_framework import generics
+from rest_framework.views import APIView
 from .models import User
 from .serializers import RegisterSerializer, UserSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -31,11 +32,11 @@ class RegisterView(generics.CreateAPIView):
             }
         })
 
-        if not supabase_signup_res.get("user"):
+        if not type(supabase_signup_res).model_fields:
             return None, supabase_signup_res
 
-        supabase_user = supabase_signup_res.get("user")
-        supabase_uid = supabase_user.get("id") if supabase_user else None
+        supabase_user = supabase_signup_res.user
+        supabase_uid = supabase_user.id if supabase_user else None
 
         return supabase_uid, None
 
@@ -60,13 +61,11 @@ class RegisterView(generics.CreateAPIView):
         self.perform_create(serializer)
         return Response(serializer.data, status=201)
     
-class SupaBaseLoginView(generics.RetrieveAPIView):
+class SupaBaseLoginView(APIView):
     """
     | POST   | `/api/login/`           | Login user and return JWT token |
     """
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-
+    permission_classes = [AllowAny]
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -79,29 +78,28 @@ class SupaBaseLoginView(generics.RetrieveAPIView):
         email = data.get("email", "").strip().lower()
         password = data.get("password")
 
-        user_data, login_res = self.login(email, password)
+        user_data, session = self.login(email, password)
 
-        if not user_data or not login_res.get("session"):
+        if not user_data or not session:
             return Response({"error": "Login failed"}, status=401)
 
-        user = self.get_object()
-        serializer = self.get_serializer(user)
+        user = User.objects.get(id=user_data.id)
+        serializer = UserSerializer(user)
         return Response({
             "user": serializer.data,
-            "access_token": login_res["session"]["access_token"],
-            "refresh_token": login_res["session"]["refresh_token"]
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token
         }, status=200)
     
     def login(self, email, password):
-        login_res = self.supa_client.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
-
-        if not login_res.get("user"):
-            return None, login_res
-
-        return login_res.get("user"), None
+        try:
+            login_res = self.supa_client.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+        except Exception as e:
+            return None, {"error": str(e)}
+        return login_res.user, login_res.session
     
 class RetrievUserView(generics.RetrieveAPIView):
     """

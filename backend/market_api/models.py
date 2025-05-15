@@ -30,6 +30,7 @@ class ExpertAdvisor(models.Model):
         related_name='expert_advisor_creator', 
         default=os.getenv("SUPERURUSER")
     )
+
     
     class Meta:
         verbose_name = 'Expert Advisor'
@@ -37,6 +38,10 @@ class ExpertAdvisor(models.Model):
         ordering = ['-created_at']
         managed = True
         db_table = 'expert_advisors'
+        unique_together = (
+            ('magic_number', 'created_by'),
+            ('name', 'created_by'),
+        )
 
     def __str__(self):
         return self.name
@@ -73,5 +78,4 @@ class ExpertUser(models.Model):
 
     def __str__(self):
         return f"{self.user.email} subscribed to {self.expert.name}"
-    
     

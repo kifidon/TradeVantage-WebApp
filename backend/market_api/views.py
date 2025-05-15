@@ -35,6 +35,22 @@ class ExpertAdvisorPagination(PageNumberPagination):
     max_page_size = 50
 
 class ExpertAdvisorViewSet(ModelViewSet):
+    """
+    A viewset that provides CRUD operations and query capabilities for Expert Advisors.
+
+    Endpoints (under `/api/experts/`):
+    - GET `/api/experts/` — List all expert advisors (supports pagination, search, and ordering).
+    - POST `/api/experts/` — Create a new expert advisor (restricted to authorized users, typically programmers).
+    - GET `/api/experts/{id}/` — Retrieve a specific expert advisor by ID.
+    - PUT `/api/experts/{id}/` — Update an existing expert advisor (full update).
+    - PATCH `/api/experts/{id}/` — Partially update an existing expert advisor.
+    - DELETE `/api/experts/{id}/` — Delete an expert advisor.
+
+    Filtering, searching, and ordering can be applied via query parameters such as:
+    - `?search=keyword` — search across name, description, or author.
+    - `?ordering=created_at` or `?ordering=-download_count` — sort by specific fields.
+    - `?page=2&page_size=10` — control pagination.
+    """
     serializer_class = ExpertAdvisorSerializer
     filterset_class = ExpertAdvisorFilter
     pagination_class = ExpertAdvisorPagination
@@ -65,8 +81,9 @@ class ExpertUserViewSet(ModelViewSet):
         serializer.save(user=self.request.user)
 
 class SupabasePrivateUploadView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsProgrammerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
+    
 
     def post(self, request):
         import ast
@@ -82,19 +99,65 @@ class SupabasePrivateUploadView(APIView):
 
         for file in uploaded_files:
             try:
+                if '-ex4' in file.name:
+                    bucket = 'ea-uploads'
+                elif '-image' in file.name:
+                    bucket = 'ea-images'
+                elif '-instructions' in file.name:
+                    bucket = 'ea-instructions'
+                else:
+                    return Response({"error": f"Unrecognized file type in {file.name}"}, status=400)
+
                 path = f"{request.user.id}/{file.name}"
-                upload_response = supabase.storage.from_('ea-uploads').upload(path, file.read())
-                if file.name.endswith('.ex4'):
+                upload_response = supabase.storage.from_(bucket).upload(path, file.read())
+
+                if '-ex4' in file.name:
                     urls[file.name] = path
                 else:
-                    urls[file.name] = supabase.storage.from_('ea-uploads').get_public_url(path)
+                    urls[file.name] = supabase.storage.from_(bucket).get_public_url(path)
             except StorageApiError as e:
-                if e.code == 'FileAlreadyExists':
-                    urls[file.name] = supabase.storage.from_('ea-uploads').get_public_url(path)
-                else:
-                    return Response({"error": str(e)}, status=500)
+                    return Response({"error": str(e)}, status=409)
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
 
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
 
         return Response({"uploaded": urls})
+    
+    def get(self, request):
+        bucket = request.data.get('bucket')
+        path = request.data.get('path')
+        if not bucket or not path:
+            return Response({'error': 'Bucket and path are required'}, status=400)
+        try:
+            file_data = supabase.storage.from_(bucket).download(path)
+            return Response({'file': file_data.decode()}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+        return Response({'error': 'File not found'}, status=404)
+    
+    def patch(self, request):
+        bucket = request.data.get('bucket')
+        path = request.data.get('path')
+        file = request.FILES.get('file')
+
+        if not bucket or not path or not file:
+            return Response({'error': 'Bucket, path, and file are required'}, status=400)
+
+        try:
+            supabase.storage.from_(bucket).upload(path, file.read(), {"upsert": True})
+            return Response({'message': 'File updated successfully'}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    def delete(self, request):
+        bucket = request.data.get('bucket')
+        path = request.data.get('path')
+        if not bucket or not path:
+            return Response({'error': 'Bucket and path are required'}, status=400)
+        try:
+            supabase.storage.from_(bucket).remove([path])
+            return Response({'message': 'File deleted successfully'}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)

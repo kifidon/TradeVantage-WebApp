@@ -21,7 +21,7 @@ class ExpertAdvisorSerializer(serializers.ModelSerializer):
             'price',
             'instructions',
             'image_url',
-            'file_url',
+            'file',
             'parameters',
         )
         read_only_fields = [ 'created_at']

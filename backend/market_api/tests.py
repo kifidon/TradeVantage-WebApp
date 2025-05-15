@@ -1,10 +1,15 @@
+from unittest.mock import patch
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
+
+import accounts.authentication
 from .models import ExpertAdvisor, ExpertUser
 from accounts.models import User
+import accounts 
 from django.contrib.auth import get_user_model
 from datetime import timedelta
 from django.utils import timezone
+from accounts.views import SupaBaseLoginView
 import json
 import requests
 import os
@@ -12,24 +17,16 @@ import os
 class ExpertAdvisorTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
-        # Register and log in a test user only once for all test cases
         cls.user_data = {
+            "id": "123e4567-e89b-12d3-a456-426614174000",
             "email": "testuser@gmail.com",
             "full_name": "Test User",
             "password": "securepassword123",
             "role": "programmer",
             "username": "TestUser",
-            "mock": True  # Mocking the Supabase signup
         }
-        APIClient().post("/api/register/", cls.user_data, format='json')
-        login_resp = APIClient().post(
-            "/api/login/",
-            {"username": cls.user_data["username"], "password": cls.user_data["password"]},
-            format='json'
-        )
-        cls.token = login_resp.data["access"]
-        cls.auth_header = f"Bearer {cls.token}"
-
+        cls.test_user = User.objects.create_user(**cls.user_data)
+        
         # Create 20 mock ExpertAdvisors
         test_user = User.objects.get(username="TestUser")
         for i in range(20):
@@ -41,7 +38,7 @@ class ExpertAdvisorTests(APITestCase):
                 created_at=timezone.now() - timedelta(days=i),
                 updated_at=timezone.now() - timedelta(days=i),
                 image_url=f"https://example.com/image{i}.png",
-                file_url=f"https://example.com/file{i}.ex4",
+                file=f"file{i}.ex4",
                 magic_number=i * i,
                 supported_pairs=["EURUSD", "GBPUSD"],
                 timeframes=["M1", "M5"],
@@ -50,19 +47,19 @@ class ExpertAdvisorTests(APITestCase):
                 parameters={"param1": "value1", "param2": "value2"},
                 created_by=test_user,
             )
-
-    def setUp(self):
-        self.client.credentials(HTTP_AUTHORIZATION=self.auth_header)
-
-    def test_create_valid_expert_advisor(self):
+            
+    
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_create_valid_expert_advisor(self, mock_authenticate):
         """Test creating an Expert Advisor with valid data should succeed (201 Created)."""
+        mock_authenticate.return_value = (self.test_user, None)
         data = {
             "name": "Valid EA",
             "description": "A valid EA",
             "version": "1.0",
             "author": "Test Author",
             "image_url": "https://example.com/image.png",
-            "file_url": "https://example.com/ea.ex4",
+            "file": "https://example.com/ea.ex4",
             "magic_number": 123456,
             "supported_pairs": ["EURUSD", "GBPUSD"],
             "timeframes": ["M5", "H1"],
@@ -77,15 +74,17 @@ class ExpertAdvisorTests(APITestCase):
         response = self.client.post("/api/experts/", data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-    def test_create_invalid_image_url(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_create_invalid_image_url(self, mock_authenticate):
         """Test creating an Expert Advisor with an invalid image_url should fail (400 Bad Request)."""
+        mock_authenticate.return_value = (self.test_user, None)
         data = {
             "name": "Invalid Image",
             "description": "Not a valid EA",
             "version": "1.0",
             "author": "Test Author",
             "image_url": "not-an-image-url",
-            "file_url": "https://example.com/ea.ex4",
+            "file": "https://example.com/ea.ex4",
             "magic_number": 123456,
             "supported_pairs": ["EURUSD", "GBPUSD"],
             "timeframes": ["M5", "H1"],
@@ -100,15 +99,17 @@ class ExpertAdvisorTests(APITestCase):
         response = self.client.post("/api/experts/", data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_create_invalid_file_url(self):
-        """Test creating an Expert Advisor with an invalid file_url should fail (400 Bad Request)."""
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_create_invalid_file_url(self, mock_authenticate):
+        """Test creating an Expert Advisor with an invalid file should fail (400 Bad Request)."""
+        mock_authenticate.return_value = (self.test_user, None)
         data = {
             "name": "Invalid File",
             "description": "Not a valid EA",
             "version": "1.0",
             "author": "Test Author",
             "image_url": "not-an-image-url",
-            "file_url": "not-a-url",
+            "file": "not-a-url",
             "magic_number": 123456,
             "supported_pairs": ["EURUSD", "GBPUSD"],
             "timeframes": ["M5", "H1"],
@@ -123,32 +124,42 @@ class ExpertAdvisorTests(APITestCase):
         response = self.client.post("/api/experts/", data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_get_default_page(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_get_default_page(self, mock_authenticate):
         """Test default GET request returns first 10 EAs due to default page size."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 10)
 
-    def test_get_custom_page_size_20(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_get_custom_page_size_20(self, mock_authenticate):
         """Test GET request with page_size=20 returns exactly 20 results."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?page_size=20")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 20)
 
-    def test_get_page_size_100(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_get_page_size_100(self, mock_authenticate):
         """Test GET request with large page_size=100 returns up to 100 results."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?page_size=100")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertLessEqual(len(response.data["results"]), 100)
 
-    def test_get_page_beyond_range(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_get_page_beyond_range(self, mock_authenticate):
         """Test GET request with page_size=25 does not exceed total number of EAs."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?page_size=25")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 20)
 
-    def test_get_ea_10_to_20_with_page_size_10_page_2(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_get_ea_10_to_20_with_page_size_10_page_2(self, mock_authenticate):
         """Assert that a specific EA is correctly paginated on page 2 when ordered by created_at ascending."""
+        mock_authenticate.return_value = (self.test_user, None)
         # Get the 11th EA when sorted by created_at ascending
         expected_ea = ExpertAdvisor.objects.order_by('created_at')[10]
         # Make the request for page 2 with ordering by created_at
@@ -158,46 +169,60 @@ class ExpertAdvisorTests(APITestCase):
         returned_ids = [ea["magic_number"] for ea in response.data["results"]]
         self.assertIn(expected_ea.magic_number, returned_ids)
 
-    def test_get_single_ea_by_id(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_get_single_ea_by_id(self, mock_authenticate):
         """Test retrieving a single Expert Advisor by its magic_number returns correct data."""
+        mock_authenticate.return_value = (self.test_user, None)
         ea = ExpertAdvisor.objects.first()
         response = self.client.get(f"/api/experts/{ea.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], ea.name)
 
-    def test_search_by_name(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_search_by_name(self, mock_authenticate):
         """Test searching by EA name returns expected results."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?search=EA 1")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(any("EA 1" in ea["name"] for ea in response.data["results"]))
 
-    def test_search_by_description(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_search_by_description(self, mock_authenticate):
         """Test searching by EA description returns expected results."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?search=description 5&ordering=created_at")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(any("description 5" in ea["description"] for ea in response.data["results"]))
 
-    def test_search_by_author(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_search_by_author(self, mock_authenticate):
         """Test searching by EA author returns expected results."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?search=Author 3")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(any("Author 3" in ea["author"] for ea in response.data["results"]))
 
-    def test_order_by_download_count(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_order_by_download_count(self, mock_authenticate):
         """Test ordering Expert Advisors by download count in descending order."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?ordering=-download_count")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 10)
 
-    def test_order_by_created_at(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_order_by_created_at(self, mock_authenticate):
         """Test ordering Expert Advisors by creation time in ascending order."""
+        mock_authenticate.return_value = (self.test_user, None)
         response = self.client.get("/api/experts/?ordering=created_at")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 10)
 
 
-    def test_ordering_by_download_count_reflects_actual_counts(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_ordering_by_download_count_reflects_actual_counts(self, mock_authenticate):
         """Test that EAs with more ExpertUser subscriptions appear higher when ordered by download count."""
+        mock_authenticate.return_value = (self.test_user, None)
         user_model = get_user_model()
         ea_with_3 = ExpertAdvisor.objects.get(name="EA 0")
         ea_with_2 = ExpertAdvisor.objects.get(name="EA 1")
@@ -225,26 +250,21 @@ class ExpertAdvisorTests(APITestCase):
         expected_order = [ea_with_3.magic_number, ea_with_2.magic_number, ea_with_1.magic_number]
         self.assertEqual(ordered_ids, expected_order)
 
-    def test_non_programmer_cannot_create_expertadvisor(self):
+    @patch("accounts.authentication.SupabaseJWTAuthentication.authenticate")
+    def test_non_programmer_cannot_create_expertadvisor(self, mock_authenticate):
         """Test that a user with role 'user' cannot create an Expert Advisor (403 Forbidden)."""
         # Register and log in a regular (non-programmer) user
         regular_data = {
+            "id": "123e4567-e89b-12d3-a456-426614174002",
             "email": "user@example.com",
             "username": "RegularUser",
             "full_name": "Regular User",
             "password": "userpass123",
             "role": "user",
-            "mock": True  # Mocking the Supabase signup
         }
-        self.client.post("/api/register/", regular_data, format='json')
-        login_resp = self.client.post(
-            "/api/login/",
-            {"username": regular_data["username"], "password": regular_data["password"]},
-            format='json'
-        )
-        regular_token = login_resp.data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {regular_token}')
-
+        mockUser = User.objects.create_user(**regular_data)
+        mock_authenticate.return_value = (mockUser, None)
+        
         # Attempt to create an EA as a regular user
         ea_data = {
             "name": "Forbidden EA",
@@ -252,7 +272,7 @@ class ExpertAdvisorTests(APITestCase):
             "version": "1.0",
             "author": "Malicious",
             "image_url": "https://example.com/forbidden.png",
-            "file_url": "https://example.com/forbidden.ex4"
+            "file": "forbidden.ex4"
         }
         response = self.client.post("/api/experts/", ea_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
