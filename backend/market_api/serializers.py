@@ -35,4 +35,4 @@ class ExpertUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpertUser
         fields = ['id', 'user', 'expert', 'subscribed_at', 'last_paid_at', 'expires_at']
-        read_only_fields = ['id', 'user', 'subscribed_at', 'last_paid_at', 'expires_at']
+        read_only_fields = ['id', 'user', 'subscribed_at']

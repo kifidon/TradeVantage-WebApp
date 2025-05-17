@@ -1,3 +1,8 @@
+import stripe
+from django.conf import settings
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+
 # views.py
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.views import APIView
@@ -13,9 +18,6 @@ from django.db.models import Count
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 import requests
 from supabase import create_client
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 
 class IsProgrammerOrReadOnly(BasePermission):
     """
@@ -81,6 +83,7 @@ class ExpertUserViewSet(ModelViewSet):
         serializer.save(user=self.request.user)
 
 class SupabasePrivateUploadView(APIView):
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     permission_classes = [IsProgrammerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
     
@@ -93,7 +96,7 @@ class SupabasePrivateUploadView(APIView):
             return Response({"error": "No files provided."}, status=400)
 
         access_token = request.headers.get('Authorization', '').split('Bearer ')[-1]
-        supabase.auth.set_session(access_token, '')
+        self.supabase.auth.set_session(access_token, '')
 
         urls = {}
 
@@ -109,12 +112,12 @@ class SupabasePrivateUploadView(APIView):
                     return Response({"error": f"Unrecognized file type in {file.name}"}, status=400)
 
                 path = f"{request.user.id}/{file.name}"
-                upload_response = supabase.storage.from_(bucket).upload(path, file.read())
+                upload_response = self.supabase.storage.from_(bucket).upload(path, file.read())
 
                 if '-ex4' in file.name:
                     urls[file.name] = path
                 else:
-                    urls[file.name] = supabase.storage.from_(bucket).get_public_url(path)
+                    urls[file.name] = self.supabase.storage.from_(bucket).get_public_url(path)
             except StorageApiError as e:
                     return Response({"error": str(e)}, status=409)
             except Exception as e:
@@ -131,7 +134,7 @@ class SupabasePrivateUploadView(APIView):
         if not bucket or not path:
             return Response({'error': 'Bucket and path are required'}, status=400)
         try:
-            file_data = supabase.storage.from_(bucket).download(path)
+            file_data = self.supabase.storage.from_(bucket).download(path)
             return Response({'file': file_data.decode()}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -146,7 +149,7 @@ class SupabasePrivateUploadView(APIView):
             return Response({'error': 'Bucket, path, and file are required'}, status=400)
 
         try:
-            supabase.storage.from_(bucket).upload(path, file.read(), {"upsert": True})
+            self.supabase.storage.from_(bucket).upload(path, file.read(), {"upsert": True})
             return Response({'message': 'File updated successfully'}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -157,7 +160,102 @@ class SupabasePrivateUploadView(APIView):
         if not bucket or not path:
             return Response({'error': 'Bucket and path are required'}, status=400)
         try:
-            supabase.storage.from_(bucket).remove([path])
+            self.supabase.storage.from_(bucket).remove([path])
             return Response({'message': 'File deleted successfully'}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
+''' Implment later: Stripe payment for subscriptions
+# Stripe Checkout Session Payments View
+class PaymentsView(APIView):
+    api_key = settings.STRIPE_SECRET_KEY
+    stripe.api_key = api_key
+    permission_classes = [IsAuthenticated]
+
+    def store_transaction(self, transaction_data):
+        serializer = ExpertUserSerializer(data=transaction_data, context={'request': self.request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+    
+    
+    def post(self, request):
+        expert_data = request.data.get('expert_data')
+        try:
+            session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                mode='subscription',
+                line_items=[{
+                    'price': expert_data.get('stripe_price_id'),  # should be stored with the ExpertAdvisor
+                    'quantity': 1,
+                }],
+                metadata={
+                    'expert_id': expert_data.get('id')
+                },
+                success_url=f'{settings.FRONTEND_URL}/dashboard/',
+                cancel_url=f'{settings.FRONTEND_URL}/market/{expert_data.get("id")}/',
+                customer_email=request.user.email
+            )
+            # Store transaction in the database giving user permission
+            transaction = {
+                'id': session.subscription,
+                'expert': ExpertAdvisor.objects.get(id=expert_data.get("id")),
+            }
+            
+            self.store_transaction(transaction)
+            return Response({'url': session.url})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Stripe Webhook View to handle Stripe webhook events
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.utils.timezone import now
+from datetime import timedelta
+
+@method_decorator(csrf_exempt, name='dispatch')
+class StripeWebhookView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        payload = request.body
+        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+        endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except ValueError as e:
+            return Response({'error': 'Invalid payload'}, status=400)
+        except stripe.error.SignatureVerificationError as e:
+            return Response({'error': 'Invalid signature'}, status=400)
+
+        if event['type'] == 'invoice.paid':
+            invoice = event['data']['object']
+            customer_email = invoice.get('customer_email')
+
+            try:
+                user = User.objects.get(email=customer_email)
+                subscription_id = invoice.get('subscription')
+
+                # You could optionally verify subscription ID with your own DB
+                expert_user = ExpertUser.objects.filter(id=subscription_id)
+                expert_user.last_paid_at = now()
+                expert_user.expires_at += timedelta(days=30)
+                expert_user.save()
+            except User.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+            except ExpertUser.DoesNotExist:
+                return Response({'error': 'ExpertUser record not found'}, status=404)
+        elif event['type'] == 'customer.subscription.deleted':
+            subscription = event['data']['object']
+            subscription_id = subscription.get('id')
+
+            # try:
+            #     pass
+                
+            # except ExpertUser.DoesNotExist:
+            #     return Response({'error': 'ExpertUser record not found'}, status=404)
+
+        return Response({'status': 'success'}, status=200)
+'''
