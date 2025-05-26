@@ -12,6 +12,10 @@ router.register(r'experts', ExpertAdvisorViewSet, basename='experts')
 router.register(r'subscriptions', ExpertUserViewSet, basename='subscriptions')
 router.register(r'trade', TradeViewSet, basename='trade')
 
+from django.http import JsonResponse
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -21,4 +25,5 @@ urlpatterns = [
     path('api/trade-auth/<int:magic_number>/', ExpertUserTradeCheck.as_view(), name='trade_auth'),
     path('api/', include(router.urls)),
     path('api/files/', SupabasePrivateUploadView.as_view(), name='supabase_upload'),
+    path("health/", health_check),
 ]
