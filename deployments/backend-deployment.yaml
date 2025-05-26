@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: kifidon/backend-app
+          image: youruser/backend-app
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
