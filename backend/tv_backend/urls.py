@@ -15,6 +15,7 @@ router.register(r'trade', TradeViewSet, basename='trade')
 from django.http import JsonResponse
 
 def health_check(request):
+    print("Health check pinged!")
     return JsonResponse({"status": "ok"})
 
 urlpatterns = [
