@@ -13,7 +13,7 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
         if len(auth_header) == 1 or len(auth_header) > 2:
             raise exceptions.AuthenticationFailed('Invalid token header')
 
-        token = auth_header[1]
+        token = auth_header[1].decode()
 
         try:
             payload = jwt.decode(
@@ -31,5 +31,9 @@ class SupabaseJWTAuthentication(authentication.BaseAuthentication):
             user = User.objects.get(id=payload['sub'])
         except User.DoesNotExist:
             raise exceptions.AuthenticationFailed('User not found')
+
+        from accounts.supabase_client import supabase
+        supabase.auth.set_session(token, "")
+
 
         return (user, None)

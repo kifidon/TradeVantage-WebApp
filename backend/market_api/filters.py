@@ -8,5 +8,5 @@ class ExpertAdvisorFilter(filters.FilterSet):
 
     class Meta:
         model = ExpertAdvisor
-        fields = ['title', 'author', 'version', 'created_at']
+        fields = ['title', 'author', 'version', 'created_at', 'created_by']
         

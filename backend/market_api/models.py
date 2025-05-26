@@ -62,12 +62,23 @@ class ExpertUser(models.Model):
         related_name='downloads'
     )
     subscribed_at = models.DateTimeField(auto_now_add=True)
-    last_paid_at = models.DateTimeField(default=timezone.now)
+    last_paid_at = models.DateTimeField(default=None, blank=True, null=True)
+    account_number = models.CharField(max_length=50, blank=True, null=True)
 
-    def thirty_days_from_now():
+    expires_at = models.DateTimeField(blank=True, null=True)
+    def thirty_days_from_now(self):
         return timezone.now() + timedelta(days=30)
+    
+    def save(self, *args, **kwargs):
+        if self.last_paid_at:
+            self.expires_at = self.last_paid_at + timedelta(days=30)
+        super().save(*args, **kwargs)
 
-    expires_at = models.DateTimeField(default=thirty_days_from_now)
+    @property
+    def is_active(self):
+        if not self.expires_at:
+            return "Processing"
+        return "Active" if timezone.now() <= self.expires_at else "Expired"
     
     class Meta:
         verbose_name = 'Expert User'
@@ -78,4 +89,3 @@ class ExpertUser(models.Model):
 
     def __str__(self):
         return f"{self.user.email} subscribed to {self.expert.name}"
-    

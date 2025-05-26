@@ -1,7 +1,7 @@
 import stripe
-from django.conf import settings
-from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from django.conf import settings
+from tv_backend.email_client import send_email
 
 # views.py
 from rest_framework.viewsets import ModelViewSet
@@ -13,11 +13,12 @@ from accounts.models import User
 from .models import ExpertAdvisor, ExpertUser
 from .serializers import ExpertAdvisorSerializer, ExpertUserSerializer
 from .filters import ExpertAdvisorFilter
-from tv_backend.settings import SUPABASE_URL, SUPABASE_KEY
 from django.db.models import Count
 from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 import requests
-from supabase import create_client
+from accounts.supabase_client import supabase
+
+
 
 class IsProgrammerOrReadOnly(BasePermission):
     """
@@ -62,10 +63,17 @@ class ExpertAdvisorViewSet(ModelViewSet):
     permission_classes = [IsProgrammerOrReadOnly]
     
     def get_queryset(self):
-        experts = ExpertAdvisor.objects.annotate(
-            download_count=Count('downloads')  # reverse FK from ExpertUser
+        user = self.request.user
+        queryset = ExpertAdvisor.objects.annotate(
+            download_count=Count('downloads')
         )
-        return experts 
+        if self.request.query_params.get('owned') == 'true' and user.is_authenticated:
+            queryset = queryset.filter(created_by=user)
+        return queryset
+
+from rest_framework import status
+from rest_framework.response import Response
+from django.utils import timezone
 
 class ExpertUserViewSet(ModelViewSet):
     serializer_class = ExpertUserSerializer
@@ -73,7 +81,10 @@ class ExpertUserViewSet(ModelViewSet):
     queryset = ExpertUser.objects.all()
 
     def get_queryset(self):
-        return ExpertUser.objects.filter(user=self.request.user)
+        user = self.request.user
+        if self.request.query_params.get('managed') == 'true' and user.role == 'programmer':
+            return ExpertUser.objects.filter(expert__created_by=user)
+        return ExpertUser.objects.filter(user=user)
 
     def perform_create(self, serializer):
         expert = serializer.validated_data.get('expert')
@@ -82,8 +93,35 @@ class ExpertUserViewSet(ModelViewSet):
             raise serializer.ValidationError("You are already subscribed to this Expert Advisor.")
         serializer.save(user=self.request.user)
 
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Custom logic: handle renew via ?renew=true
+        if request.query_params.get("renew") == "true":
+            instance.last_paid_at = timezone.now()
+            instance.expires_at = instance.thirty_days_from_now()
+            instance.save()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        # Custom logic: handle push via ?push=true
+        if request.query_params.get("push") == "true":
+            instance.last_paid_at = timezone.now()
+            instance.expires_at = instance.thirty_days_from_now()
+            instance.save()
+            # Generate signed download link and send email
+            expert_file_path = instance.expert.file  # This should be the path stored in the 'file' field
+            download_url = supabase.storage.from_("ea-uploads").create_signed_url(expert_file_path, 3600).get("signedURL")
+
+            to_email = "timmyifidon@gmail.com" if settings.DEBUG else instance.user.email
+            subject = f"Your EA: {instance.expert.name}"
+            body = f"Hi {instance.user.full_name},\n\nYour expert advisor '{instance.expert.name}' is now available for download.\n\nDownload it here (expires in 1 hour):\n{download_url}\n\nBest,\nThe TradeVantage Team"
+
+            send_email(to_email, subject, body)
+            serializer = self.get_serializer(instance)
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return super().partial_update(request, *args, **kwargs)
+
 class SupabasePrivateUploadView(APIView):
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     permission_classes = [IsProgrammerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
     
@@ -96,7 +134,7 @@ class SupabasePrivateUploadView(APIView):
             return Response({"error": "No files provided."}, status=400)
 
         access_token = request.headers.get('Authorization', '').split('Bearer ')[-1]
-        self.supabase.auth.set_session(access_token, '')
+        supabase.auth.set_session(access_token, '')
 
         urls = {}
 
@@ -112,12 +150,22 @@ class SupabasePrivateUploadView(APIView):
                     return Response({"error": f"Unrecognized file type in {file.name}"}, status=400)
 
                 path = f"{request.user.id}/{file.name}"
-                upload_response = self.supabase.storage.from_(bucket).upload(path, file.read())
+                # Determine content type based on bucket
+                if bucket == 'ea-uploads':
+                    content_type = 'application/octet-stream'
+                elif bucket == 'ea-images':
+                    content_type = file.content_type or 'image/jpeg'
+                elif bucket == 'ea-instructions':
+                    content_type = file.content_type or 'application/pdf'
+                else:
+                    content_type = 'application/octet-stream'
+
+                upload_response = supabase.storage.from_(bucket).upload(path, file.read(), {"content-type": content_type})
 
                 if '-ex4' in file.name:
                     urls[file.name] = path
                 else:
-                    urls[file.name] = self.supabase.storage.from_(bucket).get_public_url(path)
+                    urls[file.name] = supabase.storage.from_(bucket).get_public_url(path)
             except StorageApiError as e:
                     return Response({"error": str(e)}, status=409)
             except Exception as e:
@@ -129,12 +177,12 @@ class SupabasePrivateUploadView(APIView):
         return Response({"uploaded": urls})
     
     def get(self, request):
-        bucket = request.data.get('bucket')
-        path = request.data.get('path')
+        bucket = request.query_params.get('bucket')
+        path = request.query_params.get('path')
         if not bucket or not path:
             return Response({'error': 'Bucket and path are required'}, status=400)
         try:
-            file_data = self.supabase.storage.from_(bucket).download(path)
+            file_data = supabase.storage.from_(bucket).download(path)
             return Response({'file': file_data.decode()}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -149,18 +197,35 @@ class SupabasePrivateUploadView(APIView):
             return Response({'error': 'Bucket, path, and file are required'}, status=400)
 
         try:
-            self.supabase.storage.from_(bucket).upload(path, file.read(), {"upsert": True})
+            if bucket == 'ea-uploads':
+                raw_content_type = getattr(file, 'content_type', None)
+                content_type = raw_content_type if isinstance(raw_content_type, str) else 'application/octet-stream'
+            elif bucket == 'ea-images':
+                raw_content_type = getattr(file, 'content_type', None)
+                content_type = raw_content_type if isinstance(raw_content_type, str) else 'image/jpeg'
+            elif bucket == 'ea-instructions':
+                raw_content_type = getattr(file, 'content_type', None)
+                content_type = raw_content_type if isinstance(raw_content_type, str) else 'application/pdf'
+            else:
+                content_type = 'application/octet-stream'
+            token = request.headers.get("Authorization", "").replace("Bearer ", "")
+            file_options = {
+                "content-type": content_type,
+                "upsert": "true",  # Overwrite existing file
+            }
+            
+            supabase.storage.from_(bucket).upload(path, file.read(), file_options)
             return Response({'message': 'File updated successfully'}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
     def delete(self, request):
-        bucket = request.data.get('bucket')
-        path = request.data.get('path')
+        bucket = request.query_params.get('bucket')
+        path = request.query_params.get('path')
         if not bucket or not path:
             return Response({'error': 'Bucket and path are required'}, status=400)
         try:
-            self.supabase.storage.from_(bucket).remove([path])
+            supabase.storage.from_(bucket).remove([path])
             return Response({'message': 'File deleted successfully'}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)

@@ -20,5 +20,5 @@ urlpatterns = [
     path('api/user/', RetrievUserView.as_view(), name='user_profile'),
     path('api/trade-auth/<int:magic_number>/', ExpertUserTradeCheck.as_view(), name='trade_auth'),
     path('api/', include(router.urls)),
-    path('api/ea-uploads/', SupabasePrivateUploadView.as_view(), name='supabase_upload'),
+    path('api/files/', SupabasePrivateUploadView.as_view(), name='supabase_upload'),
 ]

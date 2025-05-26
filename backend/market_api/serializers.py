@@ -31,8 +31,27 @@ class ExpertAdvisorSerializer(serializers.ModelSerializer):
     
 class ExpertUserSerializer(serializers.ModelSerializer):
     user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    is_active = serializers.ReadOnlyField()
+    expert = ExpertAdvisorSerializer(read_only=True)
+    expert_id = serializers.PrimaryKeyRelatedField(
+        queryset=ExpertAdvisor.objects.all(),
+        source='expert',
+        write_only=True
+    ) 
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.SerializerMethodField()
+
+    def get_user_name(self, obj):
+        return obj.user.full_name
+
+    def get_user_email(self, obj):
+        return obj.user.email
 
     class Meta:
         model = ExpertUser
-        fields = ['id', 'user', 'expert', 'subscribed_at', 'last_paid_at', 'expires_at']
-        read_only_fields = ['id', 'user', 'subscribed_at']
+        fields = [
+            'id', 'user', 'expert', 'expert_id',
+            'subscribed_at', 'last_paid_at', 'expires_at',
+            'is_active', 'account_number', 'user_name', 'user_email'
+        ]
+        read_only_fields = ['id', 'user', 'subscribed_at', 'expires_at', 'is_active', 'last_paid_at']
