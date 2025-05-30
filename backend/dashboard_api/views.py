@@ -1,3 +1,4 @@
+from rest_framework.permissions import BasePermission, SAFE_METHODS
 from rest_framework.viewsets import ModelViewSet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
@@ -13,9 +14,22 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.generics import RetrieveAPIView
 
+
+# Custom permission: only owner can update/delete, any authenticated user can read
+class IsOwnerOrReadOnly(BasePermission):
+    """
+    Custom permission to only allow owners of a Trade to update or delete it.
+    """
+    def has_object_permission(self, request, view, obj):
+        # Read permissions for any authenticated user
+        if request.method in SAFE_METHODS:
+            return True
+        # Write permissions only for the owner
+        return obj.user == request.user
+
 class TradeViewSet(ModelViewSet):
     serializer_class = TradeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = TradeFilter
 
