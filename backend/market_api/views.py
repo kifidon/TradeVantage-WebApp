@@ -23,14 +23,20 @@ from accounts.supabase_client import supabase
 class IsProgrammerOrReadOnly(BasePermission):
     """
     Custom permission to only allow users with role 'programmer' to create,
-    update, or delete, while allowing read-only access to any authenticated user.
+    update, or delete if they are also the creator of the object.
+    Read-only access is allowed for any authenticated user.
     """
-    def has_permission(self, request, view):
-        # Allow safe methods for any authenticated user
+    def has_object_permission(self, request, view, obj):
+        # Allow read-only methods for any authenticated user
         if request.method in SAFE_METHODS:
             return bool(request.user and request.user.is_authenticated)
-        # Allow others only if user is authenticated and role is programmer
-        return bool(request.user and request.user.is_authenticated and getattr(request.user, 'role', None) == 'programmer')
+        # For write methods, user must be a programmer and the creator
+        return (
+            request.user and
+            request.user.is_authenticated and
+            getattr(request.user, 'role', None) == 'programmer' and
+            hasattr(obj, 'created_by') and getattr(obj, 'created_by', None) == request.user
+        )
 
 class ExpertAdvisorPagination(PageNumberPagination):
     page_size = 10

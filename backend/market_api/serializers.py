@@ -3,6 +3,11 @@ from .models import ExpertAdvisor, ExpertUser
 
 class ExpertAdvisorSerializer(serializers.ModelSerializer):
     created_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    created_by_id = serializers.SerializerMethodField()
+    
+    def get_created_by_id(self, obj):
+        return obj.created_by.id if obj.created_by else None
+    
     class Meta:
         model = ExpertAdvisor
         fields = (
@@ -23,6 +28,7 @@ class ExpertAdvisorSerializer(serializers.ModelSerializer):
             'image_url',
             'file',
             'parameters',
+            'created_by_id',
         )
         read_only_fields = [ 'created_at']
         
