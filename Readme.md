@@ -2,8 +2,8 @@
 
 # TradeVantage WebApp – Full Stack Cloud Microservices
 
-TradeVantage is a cloud-native trading automation platform composed of two containerized microservices: a **Django-based backend API** and a **Next.js-based frontend client**. Both services are independently containerized, deployed to a Kubernetes cluster, and maintained using a GitHub Actions CI/CD pipeline. The project is live at" 
-```https://tradevantage-webapp-1.onrender.com/```
+TradeVantage is a cloud-native trading automation platform composed of two containerized microservices: a **Django-based backend API** and a **Next.js-based frontend client**. Both services are independently containerized, deployed to a Kubernetes cluster, and maintained using a GitHub Actions CI/CD pipeline.
+Check out the live platform: [TradeVantage Web App](https://tradevantage-webapp-1.onrender.com/)
 
 ---
 
