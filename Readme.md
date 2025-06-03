@@ -11,12 +11,12 @@ TradeVantage is a cloud-native trading automation platform composed of two conta
 ```
 Client (Browser)
    ↓
-Frontend (Next.js, Tailwind) 
+Frontend (Next.js, Tailwind)
    ↓
 Backend (Django REST, PostgreSQL)
-   ↓                              ↓
- Supabase (Storage, RLS)       Stripe Webhooks
-   ↓                              ↓
+   ↓                      ↓
+Supabase (Storage, RLS)   Stripe Webhooks → Backend (Webhook Endpoint)
+   ↓
 Kubernetes (Deployments, HPA, Services)
 ```
 
