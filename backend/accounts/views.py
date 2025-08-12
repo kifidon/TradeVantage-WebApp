@@ -5,6 +5,7 @@ from .serializers import RegisterSerializer, UserSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
+from tv_backend.logger import get_logger, log_user_action, log_request
 import os
 
 class RegisterView(generics.CreateAPIView):
@@ -63,15 +64,21 @@ class RegisterView(generics.CreateAPIView):
             
 
     def create(self, request, *args, **kwargs):
+        logger = get_logger()
+        log_request(request, "RegisterView.create")
+        
         data = request.data.copy()
         email = data.get("email", "").strip().lower()
+        role = data.get("role", "user")
 
         supabase_uid, error, code = self.supabase_signup(data)
 
         if error:
+            logger.warning(f"Registration failed for {email}: {error}")
             return Response(error, status=code)
 
         if not supabase_uid:
+            logger.error(f"Registration failed for {email}: No Supabase UID returned")
             return Response({"error": "Invalid Response. Please try again later"}, status=500)
 
         data["id"] = supabase_uid
@@ -82,10 +89,14 @@ class RegisterView(generics.CreateAPIView):
         try: 
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
+            logger.info(f"User registered successfully: {email} with role: {role}")
+            log_user_action(email, "user_registered", f"Role: {role}")
             return Response(serializer.data, status=201)
         except ValidationError as e:
+            logger.warning(f"Registration validation error for {email}: {e}")
             return Response({"error": {"A user with this email/username already exists"}}, status=409)
         except Exception as e:
+            logger.error(f"Registration server error for {email}: {e}")
             return Response({"error": "Oops, There was a problem on the server. Please try again later."}, status=500)
     
 class SupaBaseLoginView(APIView):
