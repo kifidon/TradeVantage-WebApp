@@ -24,6 +24,7 @@ class ExpertAdvisor(models.Model):
     image_url = models.URLField(max_length=255, blank=True, null=True)
     file = models.CharField(max_length=255, blank=True, null=True)
     parameters = models.JSONField(default=dict, blank=True)
+    stripe_price_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe price ID for this expert advisor")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -64,8 +65,10 @@ class ExpertUser(models.Model):
     subscribed_at = models.DateTimeField(auto_now_add=True)
     last_paid_at = models.DateTimeField(default=None, blank=True, null=True)
     account_number = models.CharField(max_length=50, blank=True, null=True)
-
+    stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True, help_text="Stripe subscription ID for this user's subscription to this expert advisor")
     expires_at = models.DateTimeField(blank=True, null=True)
+    state = models.CharField(max_length=50, blank=True, null=True)
+    
     def thirty_days_from_now(self):
         return timezone.now() + timedelta(days=30)
     
