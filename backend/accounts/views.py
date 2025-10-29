@@ -112,21 +112,43 @@ class SupaBaseLoginView(APIView):
         self.supa_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
     def post(self, request, *args, **kwargs):
+        logger = get_logger()
+        log_request(request, "SupaBaseLoginView.post")
+        
         data = request.data.copy()
         email = data.get("email", "").strip().lower()
         password = data.get("password")
 
-        user_data, session = self.login(email, password)
+        if not email or not password:
+            logger.warning(f"Login attempt with missing credentials")
+            return Response({"error": "Email and password are required"}, status=400)
 
-        if not user_data or not session:
-            return Response({"error": {session['error']}}, status=401)
+        user_data, result = self.login(email, password)
 
-        user = User.objects.get(id=user_data.id)
+        # Check if login failed (result is a dict with 'error' key)
+        if not user_data or not result or isinstance(result, dict):
+            error_msg = result.get('error', 'Invalid email or password') if isinstance(result, dict) else 'Invalid email or password'
+            logger.warning(f"Login failed for {email}: {error_msg}")
+            return Response({"error": error_msg}, status=401)
+
+        # Check if user exists in Django database
+        try:
+            user = User.objects.get(id=user_data.id)
+        except User.DoesNotExist:
+            logger.error(f"User {email} authenticated with Supabase but not found in Django database")
+            return Response({"error": "User not found in database. Please contact support."}, status=401)
+        except Exception as e:
+            logger.error(f"Database error during login for {email}: {str(e)}")
+            return Response({"error": "Database error occurred"}, status=500)
+
         serializer = UserSerializer(user)
+        logger.info(f"User {email} logged in successfully")
+        log_user_action(email, "user_login", "User logged in")
+        
         return Response({
             "user": serializer.data,
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token
+            "access_token": result.access_token,
+            "refresh_token": result.refresh_token
         }, status=200)
     
     def patch(self, request, *args, **kwargs):
@@ -164,8 +186,12 @@ class SupaBaseLoginView(APIView):
                 "password": password
             })
             
+            # Check if Supabase returned an error
+            if hasattr(login_res, 'error') and login_res.error:
+                return None, {"error": str(login_res.error)}
+            
         except Exception as e:
-            return None, {"error": str(e)}
+            return None, {"error": "Invalid email or password"}
         return login_res.user, login_res.session
     
 class RetrievUserView(generics.RetrieveAPIView):

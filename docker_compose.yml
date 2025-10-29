@@ -13,8 +13,8 @@ services:
       - DJANGO_SETTINGS_MODULE=tv_backend.production_settings
   frontend:
     build:
-      context: .
-      dockerfile: DockerFile.Next
+      context: ./frontend
+      dockerfile: DockerFile
     volumes:
       - ./frontend:/app
     env_file:

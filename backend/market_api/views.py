@@ -592,6 +592,43 @@ class StripeWebhookView(APIView):
                 log_error(f"Payement process for user {customer_email} failed on subscription {subscription_id}")
                 return Response({'error': 'User not found'}, status=404)
                 
+        elif event['type'] == 'invoice.payment_failed':
+            invoice = event['data']['object']
+            subscription_id = invoice.get('subscription')
+            customer_email = invoice.get('customer_email')
+            
+            try:
+                # Find the ExpertUser record for this subscription
+                expert_user = ExpertUser.objects.filter(stripe_subscription_id=subscription_id).first()
+                if expert_user:
+                    # Update state to indicate payment failure
+                    expert_user.state = "Payment Failed"
+                    expert_user.save()
+                    
+                    # Send notification email about failed payment
+                    try:
+                        send_email(
+                            to_email=customer_email,
+                            subject="Payment Failed - Please Update Your Payment Method",
+                            message=f"""
+                            We attempted to charge your payment method for utility {expert_user.expert.name}, but the payment failed.
+                            
+                            Please update your payment method in Stripe or contact support if you need assistance.
+                            
+                            Your subscription will remain active until {expert_user.expires_at} if payment is not received.
+                            """
+                        )
+                    except Exception as e:
+                        log_error(f"Failed to send payment failure email: {str(e)}")
+                    
+                    log_user_action(expert_user.user, "payment_failed", f"Payment failed for {expert_user.expert.name}")
+                    print(f"Payment failed for subscription {subscription_id}, user {customer_email}")
+                else:
+                    print(f"No ExpertUser record found for subscription {subscription_id}")
+                    
+            except Exception as e:
+                log_error(f"Error handling payment failure: {e}")
+                
         elif event['type'] == 'customer.subscription.deleted':
             subscription = event['data']['object']
             subscription_id = subscription.get('id')
@@ -602,12 +639,39 @@ class StripeWebhookView(APIView):
                 if expert_user:
                     # Set expiration to now (immediate cancellation)
                     expert_user.expires_at = timezone.now()
+                    expert_user.state = "Cancelled"
                     expert_user.save()
+                    
+                    log_user_action(expert_user.user, "subscription_cancelled", f"Cancelled subscription to {expert_user.expert.name}")
                     print(f"Subscription {subscription_id} cancelled for user {expert_user.user.email}")
                 else:
                     print(f"No ExpertUser record found for subscription {subscription_id}")
                     
             except Exception as e:
-                print(f"Error handling subscription deletion: {e}")
+                log_error(f"Error handling subscription deletion: {e}")
+                
+        elif event['type'] == 'customer.subscription.updated':
+            subscription = event['data']['object']
+            subscription_id = subscription.get('id')
+            status = subscription.get('status')
+            
+            try:
+                expert_user = ExpertUser.objects.filter(stripe_subscription_id=subscription_id).first()
+                if expert_user:
+                    # Update state based on Stripe subscription status
+                    if status == 'active':
+                        expert_user.state = "Active"
+                    elif status == 'past_due':
+                        expert_user.state = "Past Due"
+                    elif status == 'unpaid':
+                        expert_user.state = "Unpaid"
+                    elif status == 'canceled':
+                        expert_user.state = "Cancelled"
+                    
+                    expert_user.save()
+                    log_user_action(expert_user.user, "subscription_updated", f"Subscription status updated to {status}")
+                    
+            except Exception as e:
+                log_error(f"Error handling subscription update: {e}")
 
         return Response({'status': 'success'}, status=200)
