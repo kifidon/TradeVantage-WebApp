@@ -2,3 +2,7 @@
 .vscode/
 .sshh
 .env
+*.env
+**/*.env
+**/TradeVantage-Backend.env
+backend/TradeVantage-Backend.env
