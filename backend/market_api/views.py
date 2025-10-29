@@ -569,7 +569,90 @@ class StripeWebhookView(APIView):
         except stripe.error.SignatureVerificationError as e:
             return Response({'error': 'Invalid signature'}, status=400)
 
-        if event['type'] == 'invoice.paid':
+        if event['type'] == 'checkout.session.completed':
+            # Handle successful checkout completion (backup mechanism)
+            session = event['data']['object']
+            subscription_id = session.get('subscription')
+            customer_email = session.get('customer_email') or session.get('customer_details', {}).get('email')
+            metadata = session.get('metadata', {})
+            
+            # Only process if this is a subscription (has subscription_id)
+            if subscription_id and metadata:
+                expert_id = metadata.get('expert_id')
+                user_id = metadata.get('user_id')
+                account_number = metadata.get('account_number', "0")
+                
+                try:
+                    user = User.objects.get(id=user_id, email=customer_email)
+                    expert = ExpertAdvisor.objects.get(id=expert_id)
+                    
+                    # Check if ExpertUser already exists (avoid duplicates)
+                    expert_user = ExpertUser.objects.filter(
+                        user=user, 
+                        expert=expert, 
+                        stripe_subscription_id=subscription_id
+                    ).first()
+                    
+                    if not expert_user:
+                        # Create ExpertUser record if it doesn't exist
+                        expert_user = ExpertUser.objects.create(
+                            user=user,
+                            expert=expert,
+                            account_number=account_number,
+                            stripe_subscription_id=subscription_id,
+                            last_paid_at=now(),
+                            state="Active"
+                        )
+                        log_user_action(user, "subscription_created", f"Subscription created via webhook for {expert.name}")
+                        print(f"Created ExpertUser via checkout.session.completed webhook for {customer_email}")
+                    else:
+                        # Update existing record if subscription_id wasn't set
+                        if not expert_user.stripe_subscription_id:
+                            expert_user.stripe_subscription_id = subscription_id
+                            expert_user.last_paid_at = now()
+                            expert_user.state = "Active"
+                            expert_user.save()
+                            print(f"Updated ExpertUser subscription_id via webhook for {customer_email}")
+                            
+                except User.DoesNotExist:
+                    log_error(f"User not found in checkout.session.completed webhook: {customer_email}, user_id: {user_id}")
+                except ExpertAdvisor.DoesNotExist:
+                    log_error(f"ExpertAdvisor not found in checkout.session.completed webhook: expert_id: {expert_id}")
+                except Exception as e:
+                    log_error(f"Error handling checkout.session.completed: {e}")
+                    
+        elif event['type'] == 'customer.subscription.created':
+            # Handle subscription creation (backup for initial subscription)
+            # Note: This fires when subscription is created, but we prefer checkout.session.completed
+            # because it has all the metadata. This is mainly for logging/backup.
+            subscription = event['data']['object']
+            subscription_id = subscription.get('id')
+            customer_id = subscription.get('customer')
+            
+            # Try to find existing ExpertUser by subscription_id
+            expert_user = ExpertUser.objects.filter(stripe_subscription_id=subscription_id).first()
+            
+            if not expert_user and customer_id:
+                # Try to find by customer if subscription_id not set yet
+                try:
+                    # Set API key for Stripe call
+                    stripe.api_key = settings.STRIPE_SECRET_KEY
+                    # Get customer email from Stripe
+                    customer = stripe.Customer.retrieve(customer_id)
+                    customer_email = getattr(customer, 'email', None)
+                    
+                    if customer_email:
+                        # Find user by email
+                        user = User.objects.get(email=customer_email)
+                        
+                        # Log that we found a new subscription but can't create ExpertUser without metadata
+                        log_error(f"customer.subscription.created received but no ExpertUser found. Subscription: {subscription_id}, User: {customer_email}. ExpertUser should be created via checkout.session.completed or purchase callback.")
+                except User.DoesNotExist:
+                    log_error(f"customer.subscription.created: User not found for email: {customer_email}")
+                except Exception as e:
+                    log_error(f"Error handling customer.subscription.created: {e}")
+                    
+        elif event['type'] == 'invoice.paid':
             invoice = event['data']['object']
             customer_email = invoice.get('customer_email')
             subscription_id = invoice.get('subscription')
@@ -589,7 +672,7 @@ class StripeWebhookView(APIView):
                     pass
                     
             except User.DoesNotExist:
-                log_error(f"Payement process for user {customer_email} failed on subscription {subscription_id}")
+                log_error(f"Payment process for user {customer_email} failed on subscription {subscription_id}")
                 return Response({'error': 'User not found'}, status=404)
                 
         elif event['type'] == 'invoice.payment_failed':
