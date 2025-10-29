@@ -44,10 +44,56 @@ class RegisterView(generics.CreateAPIView):
                 return None, {"error": "Invalid user data from Supabase"}, status_code or 500
             return supabase_user.id, None, status_code or 201
         except Exception as e:
+            from gotrue.errors import AuthApiError, AuthWeakPasswordError
+            # Handle specific password validation errors
+            if isinstance(e, AuthWeakPasswordError):
+                error_msg = "Password must contain at least one character from each of the following: lowercase letters (a-z), uppercase letters (A-Z), numbers (0-9), and special characters (!@#$%^&*()_+-=[]{};':\"|<>?,./`~.)."
+                return None, {"error": error_msg}, 422
+            
             # Determine status code from exception or response
             status_code = getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
             # Determine message
             msg = getattr(e, "message", None) or str(e)
+            
+            # Handle AuthApiError specifically
+            if isinstance(e, AuthApiError):
+                # Check if it's a weak password error
+                error_str = str(e).lower()
+                if "weak password" in error_str or "password should contain" in error_str:
+                    error_msg = "Password must contain at least one character from each of the following: lowercase letters (a-z), uppercase letters (A-Z), numbers (0-9), and special characters (!@#$%^&*()_+-=[]{};':\"|<>?,./`~.)."
+                    return None, {"error": error_msg}, 422
+                
+                # Use status code from exception or default to 422 for validation errors
+                if status_code == 400:
+                    # Check if it's a validation error masquerading as 400
+                    if "password" in error_str:
+                        error_msg = "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character."
+                        return None, {"error": error_msg}, 422
+                    return None, {"error": f"Invalid request: {msg}"}, 400
+                elif status_code == 401:
+                    return None, {"error": f"Unauthorized: {msg}"}, 401
+                elif status_code == 404:
+                    return None, {"error": f"Resource not found: {msg}"}, 404
+                elif status_code == 409:
+                    if "email" in error_str or "already exists" in error_str:
+                        return None, {"error": "An account with this email already exists. Please login instead."}, 409
+                    return None, {"error": f"Conflict: {msg}"}, 409
+                elif status_code == 422:
+                    if "password" in error_str:
+                        error_msg = "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character."
+                        return None, {"error": error_msg}, 422
+                    return None, {"error": msg}, 422
+                elif status_code == 429:
+                    return None, {"error": "Too many signup attempts. Please wait a few minutes before trying again."}, 429
+                else:
+                    # Default to 422 for validation errors from AuthApiError
+                    if "password" in error_str or "weak" in error_str:
+                        error_msg = "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character."
+                        return None, {"error": error_msg}, 422
+                    logger.exception("Unexpected AuthApiError during Supabase signup")
+                    return None, {"error": msg}, status_code or 422
+            
+            # Handle other exceptions
             if status_code == 400:
                 return None, {"error": f"Bad request: {msg}"}, 400
             elif status_code == 401:
@@ -57,7 +103,7 @@ class RegisterView(generics.CreateAPIView):
             elif status_code == 409:
                 return None, {"error": f"Conflict: {msg}"}, 409
             elif status_code == 422:
-                return None, {"error": f"Unprocessable entity: {msg}"}, 422
+                return None, {"error": msg}, 422
             # Fallback for other cases
             logger.exception("Unexpected error during Supabase signup")
             return None, {"error": msg}, status_code or 500
