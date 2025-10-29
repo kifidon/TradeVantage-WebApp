@@ -8,6 +8,13 @@
 #property version   "1.13r-sec"
 #property strict
 
+//--- Creator email (hardcoded in source code to uniquely identify EA)
+// This must be defined before including TradeVantage_Util.mqh
+const string CREATOR_EMAIL = "kenifidon007@gmail.com";  // EA Creator Email
+
+//--- Include TradeVantage Utilities
+#include "TradeVantage_Util.mqh"
+
 //--- Input Parameters
 input string    Section1 = "========== Bollinger Bands Settings ==========";
 input int       BB_Period = 50;                    // BB Period
@@ -68,9 +75,8 @@ input long      AllowedAccountNumber = 0;          // 0 = no account lock. Set a
 input string    ExpiryDate = "31/12/2025";         // Format dd/mm/yyyy. After this date EA will not open new trades.
 
 //--- Backend Integration inputs
-input string    API_URL = "http://your-backend-url.com";  // Backend API URL
-input string    JWT_TOKEN = "";  // JWT Authentication Token
-input string    EXPERT_UUID = "";  // Expert UUID from TradeVantage
+// Note: EMAIL, PASSWORD, API_URL, and MAGIC_NUMBER are set in TradeVantage_Util.mqh
+// CREATOR_EMAIL is defined at the top of this file (before the include)
 input bool      ENABLE_BACKEND_SYNC = false;  // Enable backend synchronization
 
 //--- Global Variables
@@ -135,25 +141,11 @@ int OnInit()
       PrintFormat("EA expired on %s. Trading disabled.", TimeToStr(gExpiryTime, TIME_DATE|TIME_MINUTES));
    }
    
-   // Backend authentication check
+   // Backend authentication will be handled automatically by AuthenticateSubscription()
+   // when ENABLE_BACKEND_SYNC is true, it will login and lookup Expert UUID automatically
    if(ENABLE_BACKEND_SYNC)
    {
-      if(StringLen(JWT_TOKEN) == 0 || StringLen(EXPERT_UUID) == 0)
-      {
-         Print("ERROR: Backend sync enabled but JWT_TOKEN or EXPERT_UUID not set!");
-         Print("Please set your JWT token and Expert UUID in EA settings.");
-         return(INIT_FAILED);
-      }
-      
-      int authResult = CheckBackendAuthentication();
-      if(authResult != 1)
-      {
-         Print("ERROR: Backend authentication failed. EA initialization failed.");
-         Print("Please check your JWT_TOKEN, EXPERT_UUID, and API_URL settings.");
-         return(INIT_FAILED);
-      }
-      
-      Print("Backend authentication successful!");
+      Print("Backend sync enabled. Login and Expert UUID lookup will occur automatically.");
    }
    else
    {
